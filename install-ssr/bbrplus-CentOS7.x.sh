@@ -25,13 +25,13 @@ echo -e "uninstall bbr..."
 sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
 sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
 if [[ -e /appex/bin/serverSpeeder.sh ]]; then
-	wget https://github.com/janlle/ssr/tree/master/install-ssr/appex.sh && chmod +x appex.sh && bash appex.sh uninstall
+	wget https://github.com/janlle/ssr/raw/master/install-ssr/appex.sh && chmod +x appex.sh && bash appex.sh uninstall
 	rm -f appex.sh
 fi
 
 # install bbrplus
 echo -e "downloading bbr plus kernel..."
-wget https://github.com/janlle/ssr/tree/master/CentOS_7.x/x86_64/kernel-${kernel_version}.rpm
+wget https://github.com/janlle/ssr/raw/master/CentOS_7.x/x86_64/kernel-${kernel_version}.rpm
 echo -e "install kernel..."
 yum install -y kernel-${kernel_version}.rpm
 
