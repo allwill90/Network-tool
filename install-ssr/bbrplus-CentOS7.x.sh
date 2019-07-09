@@ -25,7 +25,7 @@ echo -e "uninstall bbr..."
 sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
 sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
 if [[ -e /appex/bin/serverSpeeder.sh ]]; then
-	wget --no-check-certificate -O appex.sh https://raw.githubusercontent.com/0oVicero0/serverSpeeder_Install/master/appex.sh && chmod +x appex.sh && bash appex.sh uninstall
+	wget https://github.com/janlle/ssr/tree/master/install-ssr/appex.sh && chmod +x appex.sh && bash appex.sh uninstall
 	rm -f appex.sh
 fi
 
