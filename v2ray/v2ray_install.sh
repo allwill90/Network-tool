@@ -29,10 +29,11 @@ print() {
     echo -e "$1${@:2}\033[0m"
 }
 
+# Check run with root .
 [[ $(id -u) != 0 ]] && print ${RED} "This script only supports run with the root." && exit 1
 
-# check system
 
+# Check system ISA .
 sys_arch(){
     ARCH=$(uname -m)
     if [[ "$ARCH" == "i686" ]] || [[ "$ARCH" == "i386" ]]; then
@@ -59,7 +60,7 @@ sys_arch(){
     return 0
 }
 
-# check machine type
+# Check machine type .
 
 # CentOS yum dnf
 if [[ -f "/etc/redhat-release" ]];then
@@ -81,7 +82,7 @@ if [[ ${OS_TYPE} == "unknown" ]];then
 fi
 
 
-# check net work
+# Check network
 IP=$(curl -s https://ifconfig.me/)
 [[ -z ${IP} ]] && ip=$(curl -s https://api.ip.sb/ip)
 [[ -z ${IP} ]] && ip=$(curl -s https://api.ipify.org)
@@ -94,6 +95,7 @@ then
     exit 3
 fi
 
+# Print machine information .
 system_info() {
     echo
     echo "##############################################"
@@ -116,7 +118,7 @@ system_info() {
 
 system_info
 
-# install require package
+# Install require packages.
 install_package() {
     for i in $@;do
         if [[ ! -x "$(command -v ${i})" ]];then
@@ -132,12 +134,7 @@ install_package() {
 install_package curl wget git unzip jq
 
 
-# system info
-
-
-
-
-# async date
+# Async date
 async_date() {
     yum install -y chrony && systemctl start chronyd && systemctl enable chronyd
 #    cat >/etc/chrony.conf <<EOF
@@ -182,7 +179,7 @@ install_v2ray() {
 	fi
     download_v2ray
     rm -rf /usr/bin/v2ray/* /etc/v2ray/config.json
-    mkdir -p /usr/bin/v2ray/ /etc/v2ray/
+    mkdir -p /usr/bin/v2ray/ /etc/v2ray/ /var/log/v2ray
     unzip /tmp/v2ray/v2ray-linux-${ISA}.zip -d /tmp/v2ray/ > /dev/null 2>&1
     cp -f /tmp/v2ray/v2ray /tmp/v2ray/v2ctl /usr/bin/v2ray/
     cp -f /tmp/v2ray/geoip.dat /tmp/v2ray/geosite.dat /usr/bin/v2ray/
@@ -207,6 +204,7 @@ install_v2ray() {
 
     # Install service and start
     install_v2ray_service
+
 
 	# Print install config info
     print ${GREEN} "V2Ray端口: ${V2RAY_PORT}"
@@ -252,6 +250,13 @@ reinstall_v2ray() {
     print ${GREEN} "Reinstall successful!"
 }
 
+# Addition new v2ray protocol .
+addition_protocol() {
+
+    echo "暂未完善"
+
+}
+
 
 
 while :; do
@@ -283,6 +288,10 @@ while :; do
 	    ;;
 	4)
 	    exit 0
+	    break
+	    ;;
+	5)
+	    addition_protocol
 	    break
 	    ;;
 	*)
