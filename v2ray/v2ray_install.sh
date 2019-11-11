@@ -16,10 +16,12 @@ BLUE="\033[0;36m"
 ISA="64"
 OS_TYPE="unknown"
 OS_FULL_NAME=""
+PROTOCOL=""
+PASSWORD=$(openssl rand -base64 8)
 SOURCE_FILE="/tmp/v2ray/v2ray-linux-${ISA}.zip"
 LOG_DIR="/var/log/v2ray"
 COMMAND="/usr/local/bin/v2ray"
-V2RAY_PORT=$(shuf -i10000-65535 -n1)
+PORT=$(shuf -i10000-65535 -n1)
 UUID=$(cat /proc/sys/kernel/random/uuid)
 SYSTEMCTL_CMD=$(command -v systemctl 2>/dev/null)
 SERVICE_CMD=$(command -v service 2>/dev/null)
@@ -145,6 +147,54 @@ async_date() {
 #    EOF
 }
 
+config_port() {
+    while :;do
+        PORT=$(shuf -i10000-65535 -n1)
+        echo
+        print ${GREEN} "Please enter ${1} port 10000 to 65535"
+        echo
+        read -p "$(print ${BLUE} "(Default: ${PORT}): ")" port
+        [[ -z "${port}" ]] && break
+        if [[ `echo "${port}*1" | bc` -eq 0 && ((${port}<10000)) && ((${port}>65535)) ]];then
+            PORT=${port}
+            break
+        fi
+    done
+}
+
+config_password() {
+    while :;do
+        PASSWORD=$(openssl rand -base64 8)
+        echo
+        print ${GREEN} "Please enter ${1} password not less than 6 characters ."
+        echo
+        read -p "$(print ${BLUE} "(Default: ${PASSWORD}): ")" password
+        [[ -z "${password}" ]] && break
+        if (($(echo ${PASSWORD} | wc -c)>6 && $(echo ${PASSWORD} | wc -c)<37));then
+            PASSWORD=${password}
+            break
+        fi
+    done
+}
+
+config_protocol() {
+    PROTOCOL=1
+    while :;do
+        for key in ${!1[*]};do
+		    print ${GREEN} "$key.${1[$key]}"
+		    echo
+		done
+        print ${GREEN} "Please enter ${1} protocol 1 to ${#1[@]}"
+        echo
+        read -p "$(print ${BLUE} "(Default: ${PROTOCOL}): ")" option
+        if [[ ${option} -gt 0 ]] && ((${option}<=${#1[@]}));then
+            print ${RED} ${option}
+            break
+        fi
+    done
+    echo
+}
+
 
 download_v2ray() {
     rm -rf /tmp/v2ray && mkdir -p /tmp/v2ray
@@ -186,20 +236,10 @@ install_v2ray() {
     cp -f /tmp/v2ray/vpoint_vmess_freedom.json /etc/v2ray/config.json
 
 	# Config port
-	while :; do
-        print ${BLUE} "请输入 V2Ray 端口 [10000-65535]"
-        read -p "$(print ${BLUE} "(默认端口: ${V2RAY_PORT}):")" v2ray_port
-        [[ -z "$v2ray_port" ]] && break
-        if [[ `echo "${V2RAY_PORT}*1" | bc` -eq 0 ]] || ((v2ray_port<10000)) || ((v2ray_port>65535));then
-            print ${RED} "Please enter 1000 to 65535!"
-        else
-            V2RAY_PORT=${v2ray_port}
-            break
-        fi
-    done
+	config_port "v2ray vmess protocol"
 
     # Config
-    sed -i "s/10086/${V2RAY_PORT}/g" "/etc/v2ray/config.json"
+    sed -i "s/10086/${PORT}/g" "/etc/v2ray/config.json"
     sed -i "s/23ad6b10-8d1a-40f7-8ad0-e3e35cd38297/${UUID}/g" "/etc/v2ray/config.json"
 
     # Install service and start
@@ -207,16 +247,21 @@ install_v2ray() {
 
 
 	# Print install config info
-    print ${GREEN} "V2Ray端口: ${V2RAY_PORT}"
+	echo
+    print ${GREEN} "V2Ray port: ${PORT}"
     echo
     print ${GREEN} "Ip: ${IP}"
     echo
 	print ${GREEN} "UUID: ${UUID}"
     echo
-	print ${GREEN} "ExtraID: ${UUID}"
+	print ${GREEN} "ExtraID: $(jq .inbounds[0].settings.clients[0].alterId /etc/v2ray/config.json)"
+    echo
+    print ${GREEN} "Level: $(jq .inbounds[0].settings.clients[0].level /etc/v2ray/config.json)"
+    echo
+    print ${GREEN} "Protocol: VMess"
     echo
     print ${GREEN} "Install v2ary successful"
-
+    echo
 }
 
 
@@ -250,13 +295,100 @@ reinstall_v2ray() {
     print ${GREEN} "Reinstall successful!"
 }
 
+
+
 # Addition new v2ray protocol .
 addition_protocol() {
 
-    echo "暂未完善"
+    if [[ ! -f /etc/systemd/system/v2ray.service ]];then
+        print ${RED} "You don't install v2ray please install v2ray first ."
+    else
+        systemctl stop v2ray
+    fi
+
+    while :;do
+        echo
+        print ${GREEN}  "1.Shadowsocks"
+        echo
+        print ${GREEN}  "2.Socks"
+        echo
+        print ${GREEN}  "3.Http"
+        echo
+        print ${GREEN}  "4.MTProto"
+        echo
+        print ${GREEN}  "5.Dokodemo-door"
+        echo
+        read -p "$(print ${BLUE} "请选择 V2Ray 传输协议 1 to 5: ")" protocol
+        case ${protocol} in
+        1)
+#            aes-256-cfb
+#            aes-128-cfb
+#            chacha20
+#            chacha20-ietf
+#            aes-256-gcm
+#            aes-128-gcm
+#            chacha20-poly1305 或称 chacha20-ietf-poly1305
+            declare -A map=(["1"]="aes-128-cfb" ["2"]="aes-256-cfb" ["3"]="chacha20" ["4"]="chacha20-ietf" ["5"]="chacha20-poly1305" ["6"]="aes-128-gcm" ["7"]="aes-256-gcm")
+            config_protocol ${map}
+
+            # Config port
+            config_port "shadowsocks"
+
+            # Config protocol
+            config_protocol ${protocol}
+
+            # Config password
+            config_password "shadowsocks"
+            echo "password: ${PASSWORD}"
+
+            # Show config info
+            break
+        ;;
+
+        2)
+            break
+        ;;
+        3)
+            break
+        ;;
+        4)
+            break
+        ;;
+        5)
+            break
+        ;;
+        *)
+            print ${RED} "Please enter 1 to 5 ."
+        ;;
+        esac
+    done
+
 
 }
 
+show_v2ray_config() {
+    CONFIG_FILE="/etc/v2ray/config.json"
+    if [[ ! -f ${CONFIG_FILE} ]];then
+        print ${RED} "Maybe you don't install v2ray please check you v2ray status."
+    fi
+    local ID=$(jq .inbounds[0].settings.clients[0].id ${CONFIG_FILE})
+
+    # Print install config info
+    echo
+    print ${GREEN} "Ip: ${IP}"
+    echo
+    print ${GREEN} "V2Ray port: $(jq .inbounds[0].port /etc/v2ray/config.json)"
+    echo
+	print ${GREEN} "UUID: ${ID//\"/}"
+    echo
+	print ${GREEN} "ExtraID: $(jq .inbounds[0].settings.clients[0].alterId ${CONFIG_FILE})"
+    echo
+    print ${GREEN} "Level: $(jq .inbounds[0].settings.clients[0].level ${CONFIG_FILE})"
+    echo
+    print ${GREEN} "Protocol: VMess"
+    echo
+    exit 0
+}
 
 
 while :; do
@@ -269,10 +401,14 @@ while :; do
 	echo
 	print ${GREEN} "3.Reinstall V2Ray"
 	echo
-	print ${GREEN} "4.Exit"
+	print ${GREEN} "4.Show v2ray config"
+	echo
+	print ${GREEN} "5.Addition new protocol"
+	echo
+	print ${GREEN} "Enter any key to exit ."
 	echo
 	print ${GREEN} "##############################################"
-	read -p "$(print ${BLUE} "请选择 [1-4]:")" option
+	read -p "$(print ${BLUE} "请选择 [1-5]:")" option
 	case ${option} in
 	1)
 		install_v2ray
@@ -287,7 +423,7 @@ while :; do
 	    break
 	    ;;
 	4)
-	    exit 0
+	    show_v2ray_config
 	    break
 	    ;;
 	5)
@@ -295,7 +431,7 @@ while :; do
 	    break
 	    ;;
 	*)
-		print ${RED} "Please enter 1 to 4!"
+		exit 0
 		;;
 	esac
 done
