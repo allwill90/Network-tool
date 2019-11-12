@@ -18,6 +18,7 @@ OS_TYPE="unknown"
 OS_FULL_NAME=""
 PROTOCOL=""
 PASSWORD=$(openssl rand -base64 8)
+USERNAME=$(openssl rand -hex 4)
 SOURCE_FILE="/tmp/v2ray/v2ray-linux-${ISA}.zip"
 LOG_DIR="/var/log/v2ray"
 COMMAND="/usr/local/bin/v2ray"
@@ -36,7 +37,7 @@ print() {
 clear
 
 # Check run with root .
-[[ $(id -u) != 0 ]] && print ${RED} "This script only supports run with the root." && exit 1
+[[ $(id -u) != 0 ]] && print ${RED} "This script only supports run with the root ." && exit 1
 
 
 # Check system ISA .
@@ -83,8 +84,8 @@ elif [[ -f "/etc/fedora-release" ]];then
 fi
 
 if [[ ${OS_TYPE} == "unknown" ]];then
-    print ${RED} "This script not support your machine"
-    exit 0
+    echo
+    print ${RED} "This script not support your machine" && echo && exit 1
 fi
 
 
@@ -97,18 +98,18 @@ IP=$(curl --connect-timeout 1 -s https://ifconfig.me/)
 [[ -z ${IP} ]] && ip=$(curl -s http://icanhazip.com)
 if [[ ! ${IP} =~ ^([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])$ ]]
 then
-    print ${RED} "Your machine can't connect to the Internet"
-    exit 3
+    echo
+    print ${RED} "Your machine can't connect to the Internet" && echo && exit 3
 fi
 
 # Print machine information .
 system_info() {
     echo
     echo "##############################################"
-    echo "# One click Install V2ray Server             #"
-    echo "# Intro: https://github.com/v2ray/v2ray-core #"
+    echo "# An easy to install v2ray script            #"
+    echo "# Source: https://github.com/v2ray/v2ray-core#"
     echo "# Author: Leone <exklin@gmail.com>           #"
-    echo "# Blog: http://exklin.xyz/                   #"
+    echo "# Support: CentOS_7+ Ubuntu Debian Fedora    #"
     echo "##############################################"
     echo
     echo
@@ -119,7 +120,7 @@ system_info() {
     print ${GREEN} "ISA: ${OS_TYPE} $(uname -m)"
     echo
     print ${GREEN} "Ip: ${IP}"
-    echo
+    echo && echo
 }
 
 system_info
@@ -165,6 +166,22 @@ config_port() {
         fi
     done
 }
+
+config_username() {
+    while :;do
+        USERNAME=$(openssl rand -hex 4)
+        echo
+        print ${GREEN} "Please enter ${1} username not less than 6 characters ."
+        echo
+        read -p "$(print ${BLUE} "(Default: ${USERNAME}): ")" username
+        [[ -z "${username}" ]] && break
+        if (($(echo ${USERNAME} | wc -c)>6 && $(echo ${USERNAME} | wc -c)<37));then
+            USERNAME=${username}
+            break
+        fi
+    done
+}
+
 
 config_password() {
     while :;do
@@ -373,19 +390,93 @@ addition_protocol() {
         ;;
 
         2)
+            # {"port":1080,"protocol":"socks","settings":{"auth":"password","accounts":[{"user":"username","pass":"password"}],"udp":false,"ip":"127.0.0.1","userLevel":0}}
+
+            # Config port
+            config_port "socks"
+
+            # Config username
+            config_username "socks"
+
+            # Config password
+            config_password "socks"
+
+            LEN=$(cat ${CONFIG_FILE} | jq '.inbounds | length')
+            for i in $(cat ${CONFIG_FILE} | jq '.inbounds[] | .protocol')
+            do
+                if [[ "${i//\"/}" = "socks" ]];then
+                    echo
+                    print ${RED} "You've installed socks nothing to do ." && echo && exit 1
+                fi
+            done
+            systemctl stop v2ray
+
+            CONFIG='{"port":'${PORT}',"protocol":"socks","settings":{"auth":"password","accounts":[{"user":"'${USERNAME}'","pass":"'${PASSWORD}'"}],"udp":false,"ip":"127.0.0.1","userLevel":0}}'
+            cat ${CONFIG_FILE} | jq 'setpath(["inbounds",'${LEN}'];'${CONFIG}')' > /etc/v2ray/config.json.tmp
+            mv ${CONFIG_FILE} /etc/v2ray/config.json.bak && mv /etc/v2ray/config.json.tmp ${CONFIG_FILE}
+            systemctl start v2ray && rm -f /etc/v2ray/config.json.bak
+
+            # Show config info
+            echo
+            print ${YELLOW} "Ip: ${IP}"
+            echo
+            print ${YELLOW} "Http port: ${PORT}"
+            echo
+            print ${YELLOW} "Username: ${USERNAME}"
+            echo
+            print ${YELLOW} "Password: ${PASSWORD}"
+            echo
+            print ${YELLOW} "Protocol: Socks"
+            echo
+            print ${YELLOW} "Addition socks successful"
+            echo
+
             break
         ;;
         3)
-            break
-        ;;
-        4)
-            break
-        ;;
-        5)
+            # {"port":1080,"protocol":"socks","settings":{"timeout":60,"accounts":[{"user":"username","pass":"password"}],"allowTransparent":false,"userLevel":0}}
+            # Config port
+            config_port "http"
+
+            # Config username
+            config_username "http"
+
+            # Config password
+            config_password "http"
+
+            LEN=$(cat ${CONFIG_FILE} | jq '.inbounds | length')
+            for i in $(cat ${CONFIG_FILE} | jq '.inbounds[] | .protocol')
+            do
+                if [[ "${i//\"/}" = "http" ]];then
+                    echo
+                    print ${RED} "You've installed http nothing to do ." && echo && exit 1
+                fi
+            done
+            systemctl stop v2ray
+
+            CONFIG='{"port":'${PORT}',"protocol":"socks","settings":{"timeout":60,"accounts":[{"user":"'${USERNAME}'","pass":"'${PASSWORD}'"}],"allowTransparent":false,"userLevel":0}}'
+            cat ${CONFIG_FILE} | jq 'setpath(["inbounds",'${LEN}'];'${CONFIG}')' > /etc/v2ray/config.json.tmp
+            mv ${CONFIG_FILE} /etc/v2ray/config.json.bak && mv /etc/v2ray/config.json.tmp ${CONFIG_FILE}
+            systemctl start v2ray && rm -f /etc/v2ray/config.json.bak
+
+            # Show config info
+            echo
+            print ${YELLOW} "Ip: ${IP}"
+            echo
+            print ${YELLOW} "Http port: ${PORT}"
+            echo
+            print ${YELLOW} "Username: ${USERNAME}"
+            echo
+            print ${YELLOW} "Password: ${PASSWORD}"
+            echo
+            print ${YELLOW} "Protocol: Http"
+            echo
+            print ${YELLOW} "Addition http successful"
+            echo
             break
         ;;
         *)
-            print ${RED} "Please enter 1 to 5 ."
+            print ${RED} "Please enter 1 to 3 ."
         ;;
         esac
     done
