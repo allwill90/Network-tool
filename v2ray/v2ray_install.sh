@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 
 # If not specify, default meaning of return value:
 # 0: Success
@@ -30,6 +30,8 @@ SERVICE_CMD=$(command -v service 2>/dev/null)
 print() {
     echo -e "$1${@:2}\033[0m"
 }
+
+clear
 
 # Check run with root .
 [[ $(id -u) != 0 ]] && print ${RED} "This script only supports run with the root." && exit 1
@@ -85,7 +87,7 @@ fi
 
 
 # Check network
-IP=$(curl -s https://ifconfig.me/)
+IP=$(curl --connect-timeout 1 -s https://ifconfig.me/)
 [[ -z ${IP} ]] && ip=$(curl -s https://api.ip.sb/ip)
 [[ -z ${IP} ]] && ip=$(curl -s https://api.ipify.org)
 [[ -z ${IP} ]] && ip=$(curl -s https://ip.seeip.org)
@@ -103,7 +105,7 @@ system_info() {
     echo "##############################################"
     echo "# One click Install V2ray Server             #"
     echo "# Intro: https://github.com/v2ray/v2ray-core #"
-    echo "# Author: Leone <exklin@leone.com>           #"
+    echo "# Author: Leone <exklin@gmail.com>           #"
     echo "# Blog: http://exklin.xyz/                   #"
     echo "##############################################"
     echo
@@ -178,21 +180,28 @@ config_password() {
 }
 
 config_protocol() {
-    PROTOCOL=1
-    while :;do
-        for key in ${!1[*]};do
-		    print ${GREEN} "$key.${1[$key]}"
+    PROTOCOL=$1
+    flag=0
+    while [[ flag -eq 0 ]];do
+		for ((i=1;i<$#;i++));do
+		    print ${GREEN} "${i}.${!i}"
 		    echo
-		done
-        print ${GREEN} "Please enter ${1} protocol 1 to ${#1[@]}"
+        done
+        print ${GREEN} "Please enter ${@:$#:1} protocol 1 to "$(( $#-1 ))
         echo
         read -p "$(print ${BLUE} "(Default: ${PROTOCOL}): ")" option
-        if [[ ${option} -gt 0 ]] && ((${option}<=${#1[@]}));then
-            print ${RED} ${option}
-            break
+        [[ -z "${option}" ]] && option=1
+        if [[ ${option} -gt 0 ]];then
+            for ((i=1;i<$#;i++));do
+                if [[ ${option} -eq ${i} ]];then
+		            PROTOCOL=${!i}
+		            echo ${PROTOCOL}
+		            flag=1
+		            break
+		        fi
+            done
         fi
     done
-    echo
 }
 
 
@@ -282,9 +291,9 @@ uninstall_v2ray() {
     if [[ -d "/var/log/v2ray" ]];then
         rm -rf /var/log/v2ray
     fi
-
+    echo
     print ${GREEN} "V2Ray uninstall successful!"
-
+    echo
     exit 0
 
 }
@@ -299,9 +308,10 @@ reinstall_v2ray() {
 
 # Addition new v2ray protocol .
 addition_protocol() {
-
-    if [[ ! -f /etc/systemd/system/v2ray.service ]];then
-        print ${RED} "You don't install v2ray please install v2ray first ."
+    if [[ ! -f /etc/systemd/system/v2ray.service || ! -f /etc/v2ray/config.json ]];then
+        echo
+        print ${RED} "You don't install v2ray please install v2ray first ." && exit 1
+        echo
     else
         systemctl stop v2ray
     fi
@@ -321,27 +331,44 @@ addition_protocol() {
         read -p "$(print ${BLUE} "请选择 V2Ray 传输协议 1 to 5: ")" protocol
         case ${protocol} in
         1)
-#            aes-256-cfb
-#            aes-128-cfb
-#            chacha20
-#            chacha20-ietf
-#            aes-256-gcm
-#            aes-128-gcm
-#            chacha20-poly1305 或称 chacha20-ietf-poly1305
-            declare -A map=(["1"]="aes-128-cfb" ["2"]="aes-256-cfb" ["3"]="chacha20" ["4"]="chacha20-ietf" ["5"]="chacha20-poly1305" ["6"]="aes-128-gcm" ["7"]="aes-256-gcm")
-            config_protocol ${map}
+            LEN=$(cat /etc/v2ray/config.json | jq '.inbounds | length')
+            for i in $(cat config.json | jq '.inbounds[] | .protocol')
+            do
+                if [[ "${i//\"/}"="shadowsocks" ]];then
+                    print ${RED} "You've installed shadowsocks nothing to do ." && exit 1
+                fi
+            done
 
             # Config port
             config_port "shadowsocks"
 
-            # Config protocol
-            config_protocol ${protocol}
-
             # Config password
             config_password "shadowsocks"
-            echo "password: ${PASSWORD}"
+
+            # Config protocol
+            config_protocol "aes-256-cfb" "aes-128-cfb" "chacha20" "chacha20-ietf" "chacha20-poly1305" "aes-128-gcm" "aes-256-gcm" "shadowsocks"
+
+            CONFIG='{"protocol":"shadowsocks","port":'${PORT}',"settings":{"method":"'${PROTOCOL}'","password":"'${PASSWORD}'","network":"tcp,udp","level":1,"ota":false}}'
+            cat /etc/v2ray/config.json | jq 'setpath(["inbounds",'${LEN}'];'${CONFIG}')' > /etc/v2ray/config.json.bak
+            rm -f /etc/v2ray/config.json && mv /etc/v2ray/config.json.bak /etc/v2ray/config.json
+
+            # start service
+            systemctl start v2ray
 
             # Show config info
+            echo
+            print ${GREEN} "Ip: ${IP}"
+            echo
+            print ${GREEN} "Shadowsocks port: ${PORT}"
+            echo
+            print ${GREEN} "Password: ${PASSWORD}"
+            echo
+            print ${GREEN} "Encrypt: ${PROTOCOL}"
+            echo
+            print ${GREEN} "Protocol: Shadowsocks"
+            echo
+            print ${GREEN} "Addition shadowsocks successful"
+            echo
             break
         ;;
 

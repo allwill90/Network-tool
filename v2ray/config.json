@@ -38,9 +38,6 @@
         "level": 1,
         "ota": false
       }
-    },
-    {
-      "hello": "world"
     }
   ],
   "outbounds": [
