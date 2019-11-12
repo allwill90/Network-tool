@@ -21,6 +21,8 @@ PASSWORD=$(openssl rand -base64 8)
 SOURCE_FILE="/tmp/v2ray/v2ray-linux-${ISA}.zip"
 LOG_DIR="/var/log/v2ray"
 COMMAND="/usr/local/bin/v2ray"
+CONFIG_FILE="/etc/v2ray/config.json"
+SERVICE_FILE="/etc/systemd/system/v2ray.service"
 PORT=$(shuf -i10000-65535 -n1)
 UUID=$(cat /proc/sys/kernel/random/uuid)
 SYSTEMCTL_CMD=$(command -v systemctl 2>/dev/null)
@@ -183,6 +185,7 @@ config_protocol() {
     PROTOCOL=$1
     flag=0
     while [[ flag -eq 0 ]];do
+        echo
 		for ((i=1;i<$#;i++));do
 		    print ${GREEN} "${i}.${!i}"
 		    echo
@@ -195,7 +198,6 @@ config_protocol() {
             for ((i=1;i<$#;i++));do
                 if [[ ${option} -eq ${i} ]];then
 		            PROTOCOL=${!i}
-		            echo ${PROTOCOL}
 		            flag=1
 		            break
 		        fi
@@ -211,6 +213,7 @@ download_v2ray() {
     if [[ ! ${LATEST_VERSION} ]]; then
         print ${RED} "Got v2ray version failed please check your network and retry" && exit 3
     fi
+    echo
     V2RAY_DOWNLOAD_LINK="https://github.com/v2ray/v2ray-core/releases/download/${LATEST_VERSION//\"/}/v2ray-linux-${ISA}.zip"
     if ! wget --no-check-certificate -q --show-progress -O ${SOURCE_FILE} ${V2RAY_DOWNLOAD_LINK}; then
 		print ${RED} "Download failed please check your network and retry." && exit 3
@@ -232,9 +235,9 @@ install_v2ray_service() {
 
 
 install_v2ray() {
-    if [[ -f /usr/bin/v2ray/v2ray || -f /etc/v2ray/config.json || -f /etc/systemd/system/v2ray.service ]]; then
-		echo "You have installed v2ray. Please uninstall it if you want reinstall it."
-		exit 1
+    if [[ -f /usr/bin/v2ray/v2ray || -f ${CONFIG_FILE} || -f /etc/systemd/system/v2ray.service ]]; then
+        echo
+		print ${RED} "You have installed v2ray. Please uninstall it first ." && echo && exit 1
 	fi
     download_v2ray
     rm -rf /usr/bin/v2ray/* /etc/v2ray/config.json
@@ -242,14 +245,14 @@ install_v2ray() {
     unzip /tmp/v2ray/v2ray-linux-${ISA}.zip -d /tmp/v2ray/ > /dev/null 2>&1
     cp -f /tmp/v2ray/v2ray /tmp/v2ray/v2ctl /usr/bin/v2ray/
     cp -f /tmp/v2ray/geoip.dat /tmp/v2ray/geosite.dat /usr/bin/v2ray/
-    cp -f /tmp/v2ray/vpoint_vmess_freedom.json /etc/v2ray/config.json
+    cp -f /tmp/v2ray/vpoint_vmess_freedom.json ${CONFIG_FILE}
 
 	# Config port
 	config_port "v2ray vmess protocol"
-
+    echo
     # Config
-    sed -i "s/10086/${PORT}/g" "/etc/v2ray/config.json"
-    sed -i "s/23ad6b10-8d1a-40f7-8ad0-e3e35cd38297/${UUID}/g" "/etc/v2ray/config.json"
+    sed -i "s/10086/${PORT}/g" "${CONFIG_FILE}"
+    sed -i "s/23ad6b10-8d1a-40f7-8ad0-e3e35cd38297/${UUID}/g" "${CONFIG_FILE}"
 
     # Install service and start
     install_v2ray_service
@@ -257,26 +260,26 @@ install_v2ray() {
 
 	# Print install config info
 	echo
-    print ${GREEN} "V2Ray port: ${PORT}"
+    print ${YELLOW} "V2Ray port: ${PORT}"
     echo
-    print ${GREEN} "Ip: ${IP}"
+    print ${YELLOW} "Ip: ${IP}"
     echo
-	print ${GREEN} "UUID: ${UUID}"
+	print ${YELLOW} "UUID: ${UUID}"
     echo
-	print ${GREEN} "ExtraID: $(jq .inbounds[0].settings.clients[0].alterId /etc/v2ray/config.json)"
+	print ${YELLOW} "ExtraID: $(jq .inbounds[0].settings.clients[0].alterId ${CONFIG_FILE})"
     echo
-    print ${GREEN} "Level: $(jq .inbounds[0].settings.clients[0].level /etc/v2ray/config.json)"
+    print ${YELLOW} "Level: $(jq .inbounds[0].settings.clients[0].level ${CONFIG_FILE})"
     echo
-    print ${GREEN} "Protocol: VMess"
+    print ${YELLOW} "Protocol: VMess"
     echo
-    print ${GREEN} "Install v2ary successful"
+    print ${YELLOW} "Install v2ary successful"
     echo
 }
 
 
 uninstall_v2ray() {
-
     if [[ -f "/etc/systemd/system/v2ray.service" ]];then
+        echo
         systemctl disable v2ray && systemctl stop v2ray && rm -f /etc/systemd/system/v2ray.service
     fi
 
@@ -292,10 +295,7 @@ uninstall_v2ray() {
         rm -rf /var/log/v2ray
     fi
     echo
-    print ${GREEN} "V2Ray uninstall successful!"
-    echo
-    exit 0
-
+    print ${GREEN} "V2Ray uninstall successful!" && echo && exit 0
 }
 
 reinstall_v2ray() {
@@ -308,12 +308,9 @@ reinstall_v2ray() {
 
 # Addition new v2ray protocol .
 addition_protocol() {
-    if [[ ! -f /etc/systemd/system/v2ray.service || ! -f /etc/v2ray/config.json ]];then
+    if [[ ! -f /etc/systemd/system/v2ray.service || ! -f ${CONFIG_FILE} ]];then
         echo
-        print ${RED} "You don't install v2ray please install v2ray first ." && exit 1
-        echo
-    else
-        systemctl stop v2ray
+        print ${RED} "You don't install v2ray please install v2ray first ." && echo && exit 1
     fi
 
     while :;do
@@ -331,13 +328,16 @@ addition_protocol() {
         read -p "$(print ${BLUE} "请选择 V2Ray 传输协议 1 to 5: ")" protocol
         case ${protocol} in
         1)
-            LEN=$(cat /etc/v2ray/config.json | jq '.inbounds | length')
-            for i in $(cat config.json | jq '.inbounds[] | .protocol')
+            LEN=$(cat ${CONFIG_FILE} | jq '.inbounds | length')
+            for i in $(cat ${CONFIG_FILE} | jq '.inbounds[] | .protocol')
             do
-                if [[ "${i//\"/}"="shadowsocks" ]];then
+                if [[ "${i//\"/}" = "shadowsocks" ]];then
+                    echo
                     print ${RED} "You've installed shadowsocks nothing to do ." && exit 1
+                    echo
                 fi
             done
+            systemctl stop v2ray
 
             # Config port
             config_port "shadowsocks"
@@ -349,25 +349,25 @@ addition_protocol() {
             config_protocol "aes-256-cfb" "aes-128-cfb" "chacha20" "chacha20-ietf" "chacha20-poly1305" "aes-128-gcm" "aes-256-gcm" "shadowsocks"
 
             CONFIG='{"protocol":"shadowsocks","port":'${PORT}',"settings":{"method":"'${PROTOCOL}'","password":"'${PASSWORD}'","network":"tcp,udp","level":1,"ota":false}}'
-            cat /etc/v2ray/config.json | jq 'setpath(["inbounds",'${LEN}'];'${CONFIG}')' > /etc/v2ray/config.json.bak
-            rm -f /etc/v2ray/config.json && mv /etc/v2ray/config.json.bak /etc/v2ray/config.json
+            cat ${CONFIG_FILE} | jq 'setpath(["inbounds",'${LEN}'];'${CONFIG}')' > /etc/v2ray/config.json.bak
+            rm -f ${CONFIG_FILE} && mv /etc/v2ray/config.json.bak ${CONFIG_FILE}
 
             # start service
             systemctl start v2ray
 
             # Show config info
             echo
-            print ${GREEN} "Ip: ${IP}"
+            print ${YELLOW} "Ip: ${IP}"
             echo
-            print ${GREEN} "Shadowsocks port: ${PORT}"
+            print ${YELLOW} "Shadowsocks port: ${PORT}"
             echo
-            print ${GREEN} "Password: ${PASSWORD}"
+            print ${YELLOW} "Password: ${PASSWORD}"
             echo
-            print ${GREEN} "Encrypt: ${PROTOCOL}"
+            print ${YELLOW} "Encrypt: ${PROTOCOL}"
             echo
-            print ${GREEN} "Protocol: Shadowsocks"
+            print ${YELLOW} "Protocol: Shadowsocks"
             echo
-            print ${GREEN} "Addition shadowsocks successful"
+            print ${YELLOW} "Addition shadowsocks successful"
             echo
             break
         ;;
@@ -394,7 +394,6 @@ addition_protocol() {
 }
 
 show_v2ray_config() {
-    CONFIG_FILE="/etc/v2ray/config.json"
     if [[ ! -f ${CONFIG_FILE} ]];then
         print ${RED} "Maybe you don't install v2ray please check you v2ray status."
     fi
@@ -417,10 +416,45 @@ show_v2ray_config() {
     exit 0
 }
 
+remove_protocol() {
+    echo
+    if [[ ! -f ${CONFIG_FILE} || ! -f ${SERVICE_FILE} ]];then
+        print ${RED} "You don't install v2ray please install v2ray first ." && echo && exit 1
+    fi
+
+    LEN=$(cat ${CONFIG_FILE} | jq '.inbounds | length')
+    if (( ${LEN}<2 ));then
+        print ${RED} "V2ray must have at least one protocol ." && echo && exit 1
+    fi
+    systemctl stop v2ray
+    while :;do
+        index=0
+        for i in $(cat ${CONFIG_FILE} | jq '.inbounds[] | .protocol');do
+            index=`expr ${index} + 1`
+            print ${GREEN} "${index}.${i//\"/}"
+            echo
+        done
+        print ${GREEN} "Enter any key cancel." && echo
+        read -p "$(print ${BLUE} "请选择需要删除的 V2ray 协议 1-${index}: ")" option
+        echo
+        if [[ ${option} -gt 0 ]] && (( ${option} < ${LEN}+1 ));then
+            ((option=${option}-1))
+            PROTOCOL=$(cat ${CONFIG_FILE} | jq '.inbounds['${option}'].protocol')
+            cat ${CONFIG_FILE} | jq 'del(.inbounds['${option}'])' > /etc/v2ray/config.json.tmp
+            mv ${CONFIG_FILE} /etc/v2ray/config.json.bak && mv /etc/v2ray/config.json.tmp ${CONFIG_FILE} && systemctl start v2ray
+            print ${GREEN} "Removed ${PROTOCOL//\"/} successful ."
+            break
+        else
+            break
+        fi
+    done
+    echo && exit 0
+}
+
 
 while :; do
 
-    print ${GREEN} "##############################################"
+    print ${GREEN} "----------------------------------------------"
 	echo
 	print ${GREEN} "1.Install V2Ray"
 	echo
@@ -432,10 +466,12 @@ while :; do
 	echo
 	print ${GREEN} "5.Addition new protocol"
 	echo
+	print ${GREEN} "6.Remove a protocol"
+	echo
 	print ${GREEN} "Enter any key to exit ."
 	echo
-	print ${GREEN} "##############################################"
-	read -p "$(print ${BLUE} "请选择 [1-5]:")" option
+	print ${GREEN} "----------------------------------------------"
+	read -p "$(print ${BLUE} "请选择 [1-6]:")" option
 	case ${option} in
 	1)
 		install_v2ray
@@ -457,33 +493,14 @@ while :; do
 	    addition_protocol
 	    break
 	    ;;
+	6)
+	    remove_protocol
+	    break
+	    ;;
 	*)
 		exit 0
 		;;
 	esac
 done
 
-# config protocol
-#	while :; do
-#	    DEFAULT_PROTOCOL=1
-#		echo -e "请选择"${YELLOW}"V2Ray"${PLAIN}"传输协议 [${MAGENTA}1-${#PROTOCOL[@]}${PLAIN}]"
-#		echo
-#		for key in ${!PROTOCOL[*]};do
-#		    echo -e "${key}.${PROTOCOL[${key}]}"
-#		done
-#		echo
-#		read -p "$(echo -e "(默认协议: ${CYAN}TCP${PLAIN})"):" v2ray_protocol
-#		[[ -z "$v2ray_protocol" ]] && v2ray_protocol=1
-#		case ${v2ray_protocol} in
-#		[1-9] | [1-2][0-9] | 3[0-2])
-#		    DEFAULT_PROTOCOL = ${v2ray_protocol}
-#			echo
-#			echo -e "${YELLOW}V2Ray 传输协议: ${PROTOCOL[${v2ray_protocol}]}${PLAIN}"
-#			break
-#			;;
-#		*)
-#			error
-#			;;
-#		esac
-#	done
 exit 0
